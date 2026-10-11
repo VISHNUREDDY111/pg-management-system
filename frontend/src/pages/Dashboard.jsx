@@ -1,225 +1,150 @@
-function Dashboard() {
-    return (
-      <div>
-  
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-800">
+
+import { useEffect, useState } from "react";
+import api from "../services/api";
+
+const initialStats = {
+  total_rooms: 0,
+  occupied_rooms: 0,
+  available_rooms: 0,
+  total_tenants: 0,
+  active_tenants: 0,
+  total_bookings: 0,
+  pending_bookings: 0,
+  payments_collected: 0,
+  payments_pending: 0,
+  open_complaints: 0,
+};
+
+function formatCurrency(amount) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number(amount) || 0);
+}
+
+export default function Dashboard() {
+  const [stats, setStats] = useState(initialStats);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function fetchDashboard() {
+    try {
+      setError("");
+      const response = await api.get("dashboard/summary/");
+      setStats({ ...initialStats, ...response.data });
+    } catch (err) {
+      console.error("Dashboard API error:", err);
+      setError(
+        "Unable to load dashboard statistics. Check that Django is running and the API endpoint is available."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchDashboard();
+  }, []);
+
+  const cards = [
+    {
+      title: "Total Rooms",
+      value: stats.total_rooms,
+      subtitle: `${stats.available_rooms} available`,
+    },
+    {
+      title: "Occupied Rooms",
+      value: stats.occupied_rooms,
+      subtitle: "Currently occupied",
+    },
+    {
+      title: "Total Tenants",
+      value: stats.total_tenants,
+      subtitle: `${stats.active_tenants} active`,
+    },
+    {
+      title: "Total Bookings",
+      value: stats.total_bookings,
+      subtitle: `${stats.pending_bookings} pending`,
+    },
+    {
+      title: "Payments Collected",
+      value: formatCurrency(stats.payments_collected),
+      subtitle: "Recorded as paid",
+    },
+    {
+      title: "Payments Pending",
+      value: formatCurrency(stats.payments_pending),
+      subtitle: "Recorded as pending",
+    },
+    {
+      title: "Open Complaints",
+      value: stats.open_complaints,
+      subtitle: "Require attention",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
             Dashboard
           </h1>
-  
-          <p className="text-sm text-slate-500">
-            Overview of your PG operations
+          <p className="mt-1 text-sm text-gray-500">
+            SLR Bliss PG — management overview
           </p>
         </div>
-  
-  
-        {/* Statistics */}
-  
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-  
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Total Rooms
-            </p>
-  
-            <h2 className="mt-2 text-3xl font-bold">
-              25
-            </h2>
-  
-            <p className="mt-2 text-sm text-green-600">
-              +2 this month
-            </p>
-          </div>
-  
-  
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Total Beds
-            </p>
-  
-            <h2 className="mt-2 text-3xl font-bold">
-              100
-            </h2>
-  
-            <p className="mt-2 text-sm text-green-600">
-              +4 this month
-            </p>
-          </div>
-  
-  
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Occupied Beds
-            </p>
-  
-            <h2 className="mt-2 text-3xl font-bold">
-              82
-            </h2>
-  
-            <p className="mt-2 text-orange-600">
-              82% occupancy
-            </p>
-          </div>
-  
-  
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Available Beds
-            </p>
-  
-            <h2 className="mt-2 text-3xl font-bold">
-              18
-            </h2>
-  
-            <p className="mt-2 text-blue-600">
-              Available now
-            </p>
-          </div>
-  
-        </div>
-  
-  
-        {/* Revenue */}
-  
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-  
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-  
-            <h2 className="text-lg font-semibold">
-              Monthly Revenue
-            </h2>
-  
-            <p className="mt-4 text-3xl font-bold text-green-600">
-              ₹4,25,000
-            </p>
-  
-            <p className="mt-2 text-sm text-green-600">
-              ↑ 12% from last month
-            </p>
-  
-          </div>
-  
-  
-          <div className="rounded-xl bg-white p-6 shadow-sm">
-  
-            <h2 className="text-lg font-semibold">
-              Occupancy
-            </h2>
-  
-            <div className="mt-5">
-  
-              <div className="mb-2 flex justify-between text-sm">
-                <span>Occupied</span>
-                <span>82%</span>
-              </div>
-  
-              <div className="h-4 rounded-full bg-slate-200">
-  
-                <div
-                  className="h-4 rounded-full bg-blue-600"
-                  style={{ width: "82%" }}
-                />
-  
-              </div>
-  
-            </div>
-  
-          </div>
-  
-        </div>
-  
-  
-        {/* Recent Bookings */}
-  
-        <div className="mt-8 rounded-xl bg-white p-6 shadow-sm">
-  
-          <h2 className="text-lg font-semibold">
-            Recent Bookings
-          </h2>
-  
-          <div className="mt-6 overflow-x-auto">
-  
-            <table className="w-full text-left">
-  
-              <thead>
-                <tr className="border-b text-sm text-slate-500">
-  
-                  <th className="pb-3">
-                    Tenant
-                  </th>
-  
-                  <th className="pb-3">
-                    Room
-                  </th>
-  
-                  <th className="pb-3">
-                    Sharing
-                  </th>
-  
-                  <th className="pb-3">
-                    Status
-                  </th>
-  
-                </tr>
-              </thead>
-  
-              <tbody>
-  
-                <tr className="border-b">
-  
-                  <td className="py-4">
-                    Rahul Sharma
-                  </td>
-  
-                  <td>
-                    203 / B2
-                  </td>
-  
-                  <td>
-                    2 Sharing
-                  </td>
-  
-                  <td>
-                    <span className="rounded-full bg-green-100 px-3 py-1 text-xs text-green-700">
-                      Approved
-                    </span>
-                  </td>
-  
-                </tr>
-  
-  
-                <tr className="border-b">
-  
-                  <td className="py-4">
-                    Arjun Singh
-                  </td>
-  
-                  <td>
-                    105 / B1
-                  </td>
-  
-                  <td>
-                    1 Sharing
-                  </td>
-  
-                  <td>
-                    <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs text-yellow-700">
-                      Pending
-                    </span>
-                  </td>
-  
-                </tr>
-  
-              </tbody>
-  
-            </table>
-  
-          </div>
-  
-        </div>
-  
+
+        <button
+          onClick={fetchDashboard}
+          disabled={loading}
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          {loading ? "Loading..." : "Refresh"}
+        </button>
       </div>
-    );
-  }
-  
-  export default Dashboard;
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          {error}
+          <button
+            onClick={fetchDashboard}
+            className="ml-2 font-semibold underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {loading && !error ? (
+        <p className="py-8 text-center text-gray-500">
+          Loading dashboard statistics...
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {cards.map((card) => (
+            <div
+              key={card.title}
+              className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+            >
+              <p className="text-sm font-medium text-gray-500">
+                {card.title}
+              </p>
+              <p className="mt-3 text-2xl font-bold text-gray-900">
+                {card.value}
+              </p>
+              <p className="mt-2 text-sm text-gray-500">
+                {card.subtitle}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -4,6 +4,7 @@ function AdminLayout() {
   const menuItems = [
     { name: "Dashboard", path: "/" },
     { name: "Rooms & Beds", path: "/rooms" },
+    { name: "Beds", path: "/beds" },
     { name: "Bookings", path: "/bookings" },
     { name: "Tenants", path: "/tenants" },
     { name: "Payments", path: "/payments" },

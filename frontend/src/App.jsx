@@ -4,6 +4,7 @@ import AdminLayout from "./components/adminlayout";
 
 import Dashboard from "./pages/Dashboard";
 import Rooms from "./pages/Rooms";
+import Beds from "./pages/Beds";
 import Bookings from "./pages/Bookings";
 import Tenants from "./pages/Tenants";
 import Payments from "./pages/Payments";
@@ -23,6 +24,8 @@ function App() {
           <Route path="/" element={<Dashboard />} />
 
           <Route path="/rooms" element={<Rooms />} />
+
+          <Route path="/beds" element={<Beds />} />
 
           <Route path="/bookings" element={<Bookings />} />
 

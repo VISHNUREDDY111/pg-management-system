@@ -1,586 +1,456 @@
-import { useMemo, useState } from "react";
 
-const initialRecords = [
-  {
-    id: "CIO001",
-    tenant: "Rahul Sharma",
-    phone: "9876543210",
-    room: "203",
-    bed: "B2",
-    sharing: "2 Sharing",
-    checkInDate: "01 Oct 2026",
-    expectedCheckOut: "30 Sep 2027",
-    actualCheckOut: "",
-    deposit: 8000,
-    status: "Checked In",
-  },
-  {
-    id: "CIO002",
-    tenant: "Arjun Singh",
-    phone: "9123456780",
-    room: "105",
-    bed: "B1",
-    sharing: "1 Sharing",
-    checkInDate: "03 Oct 2026",
-    expectedCheckOut: "02 Oct 2027",
-    actualCheckOut: "",
-    deposit: 14000,
-    status: "Checked In",
-  },
-  {
-    id: "CIO003",
-    tenant: "Kiran Kumar",
-    phone: "9988776655",
-    room: "201",
-    bed: "B3",
-    sharing: "3 Sharing",
-    checkInDate: "15 Sep 2026",
-    expectedCheckOut: "14 Sep 2027",
-    actualCheckOut: "",
-    deposit: 6000,
-    status: "Checked In",
-  },
-  {
-    id: "CIO004",
-    tenant: "Vamsi Krishna",
-    phone: "9876501234",
-    room: "301",
-    bed: "B3",
-    sharing: "4 Sharing",
-    checkInDate: "10 Jun 2026",
-    expectedCheckOut: "09 Sep 2026",
-    actualCheckOut: "09 Sep 2026",
-    deposit: 5500,
-    status: "Checked Out",
-  },
-];
+import { useEffect, useState } from "react";
+import api from "../services/api";
 
-function CheckInOut() {
-  const [records, setRecords] = useState(initialRecords);
+const today = () => {
+  const date = new Date();
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000)
+    .toISOString()
+    .slice(0, 10);
+};
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+const initialForm = {
+  tenant: "",
+  bed: "",
+  check_in_date: today(),
+  expected_check_out: "",
+  security_deposit: "0",
+};
 
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+function getList(data) {
+  return Array.isArray(data) ? data : data?.results || [];
+}
 
-  const [selectedRecord, setSelectedRecord] = useState(null);
+export default function CheckInOut() {
+  const [records, setRecords] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [beds, setBeds] = useState([]);
+  const [form, setForm] = useState(initialForm);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const [formData, setFormData] = useState({
-    tenant: "",
-    phone: "",
-    room: "",
-    bed: "",
-    sharing: "2 Sharing",
-    checkInDate: "",
-    expectedCheckOut: "",
-    deposit: "",
-  });
+  async function loadData() {
+    setLoading(true);
+    setError("");
 
-  const stats = useMemo(() => {
-    return {
-      total: records.length,
-      checkedIn: records.filter(
-        (record) => record.status === "Checked In"
-      ).length,
-      checkedOut: records.filter(
-        (record) => record.status === "Checked Out"
-      ).length,
-    };
-  }, [records]);
+    try {
+      const [stayResponse, tenantResponse, bedResponse] =
+        await Promise.all([
+          api.get("check-in-out/"),
+          api.get("tenants/"),
+          api.get("beds/"),
+        ]);
 
-  const filteredRecords = useMemo(() => {
-    return records.filter((record) => {
-      const matchesSearch =
-        record.tenant.toLowerCase().includes(search.toLowerCase()) ||
-        record.phone.includes(search) ||
-        record.id.toLowerCase().includes(search.toLowerCase());
+      setRecords(getList(stayResponse.data));
+      setTenants(
+        getList(tenantResponse.data).filter(
+          (tenant) => tenant.status === "Active"
+        )
+      );
+      setBeds(getList(bedResponse.data));
+    } catch (err) {
+      console.error("Check-in data error:", err);
+      setError(
+        "Could not load stays, tenants, or beds. Check that all three API endpoints are working."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      const matchesStatus =
-        statusFilter === "All" || record.status === statusFilter;
+  useEffect(() => {
+    loadData();
+  }, []);
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [records, search, statusFilter]);
+  const availableBeds = beds.filter(
+    (bed) => bed.status === "Available"
+  );
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  const activeRecords = records.filter(
+    (record) => record.status === "Checked In"
+  );
 
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  const completedRecords = records.filter(
+    (record) => record.status === "Checked Out"
+  );
 
-  const handleAddRecord = (e) => {
-    e.preventDefault();
+  function bedLabel(bed) {
+    const roomId =
+      typeof bed.room === "object" ? bed.room?.id : bed.room;
+    const room = beds.length
+      ? bed.room?.room_number ??
+        `Room ${
+          typeof bed.room === "object"
+            ? bed.room?.room_number ?? roomId
+            : roomId
+        }`
+      : `Room ${roomId}`;
 
-    const newRecord = {
-      id: `CIO${String(records.length + 1).padStart(3, "0")}`,
-      tenant: formData.tenant,
-      phone: formData.phone,
-      room: formData.room,
-      bed: formData.bed,
-      sharing: formData.sharing,
-      checkInDate: formData.checkInDate,
-      expectedCheckOut: formData.expectedCheckOut,
-      actualCheckOut: "",
-      deposit: Number(formData.deposit) || 0,
-      status: "Checked In",
-    };
+    return `${room} / Bed ${bed.bed_number}`;
+  }
 
-    setRecords((prev) => [newRecord, ...prev]);
+  function selectedTenant() {
+    return tenants.find(
+      (tenant) => String(tenant.id) === String(form.tenant)
+    );
+  }
 
-    setFormData({
-      tenant: "",
-      phone: "",
-      room: "",
-      bed: "",
-      sharing: "2 Sharing",
-      checkInDate: "",
-      expectedCheckOut: "",
-      deposit: "",
-    });
+  async function checkIn(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setSuccess("");
 
-    setShowAddModal(false);
-  };
+    try {
+      await api.post("check-in-out/", {
+        tenant: Number(form.tenant),
+        bed: Number(form.bed),
+        check_in_date: form.check_in_date,
+        expected_check_out: form.expected_check_out,
+        security_deposit: Number(form.security_deposit),
+        status: "Checked In",
+      });
 
-  const handleCheckOut = (id) => {
-    const today = new Date().toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+      setSuccess("Tenant checked in and bed assigned successfully.");
+      setForm(initialForm);
+      setShowForm(false);
+      await loadData();
+    } catch (err) {
+      console.error(
+        "Check-in error:",
+        err.response?.data || err
+      );
 
-    setRecords((prev) =>
-      prev.map((record) =>
-        record.id === id
-          ? {
-              ...record,
-              status: "Checked Out",
-              actualCheckOut: today,
-            }
-          : record
-      )
+      const details = err.response?.data;
+      setError(
+        typeof details === "object"
+          ? Object.entries(details)
+              .map(([key, value]) => {
+                const message = Array.isArray(value)
+                  ? value.join(", ")
+                  : typeof value === "string"
+                  ? value
+                  : JSON.stringify(value);
+                return `${key}: ${message}`;
+              })
+              .join(" | ")
+          : "Check-in failed. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function checkOut(record) {
+    const confirmed = window.confirm(
+      `Check out ${record.tenant_name || `tenant #${record.tenant}`}?`
     );
 
-    setSelectedRecord(null);
-    setShowDetailsModal(false);
-  };
+    if (!confirmed) return;
 
-  const openDetails = (record) => {
-    setSelectedRecord(record);
-    setShowDetailsModal(true);
-  };
+    setError("");
+    setSuccess("");
 
-  const statusClass = (status) => {
-    if (status === "Checked In") {
-      return "bg-green-100 text-green-700";
+    try {
+      await api.patch(`check-in-out/${record.id}/`, {
+        status: "Checked Out",
+        actual_check_out: today(),
+      });
+
+      setSuccess("Tenant checked out and bed released successfully.");
+      await loadData();
+    } catch (err) {
+      console.error(
+        "Checkout error:",
+        err.response?.data || err
+      );
+
+      const details = err.response?.data;
+      setError(
+        typeof details === "object"
+          ? Object.entries(details)
+              .map(([key, value]) =>
+                `${key}: ${
+                  Array.isArray(value) ? value.join(", ") : JSON.stringify(value)
+                }`
+              )
+              .join(" | ")
+          : "Checkout failed. Please try again."
+      );
+    }
+  }
+
+  function tenantName(record) {
+    if (record.tenant_name) return record.tenant_name;
+
+    if (record.tenant && typeof record.tenant === "object") {
+      return record.tenant.name || `Tenant #${record.tenant.id}`;
     }
 
-    return "bg-gray-100 text-gray-700";
-  };
+    const tenant = tenants.find(
+      (item) => String(item.id) === String(record.tenant)
+    );
+
+    return tenant?.name || `Tenant #${record.tenant}`;
+  }
+
+  function tenantBed(record) {
+    const tenantId =
+      typeof record.tenant === "object"
+        ? record.tenant?.id
+        : record.tenant;
+
+    const tenant = tenants.find(
+      (item) => String(item.id) === String(tenantId)
+    );
+
+    if (tenant?.bed && typeof tenant.bed === "object") {
+      return `${tenant.bed.bed_number || ""}`;
+    }
+
+    const bed = beds.find(
+      (item) =>
+        tenant?.bed != null &&
+        String(item.id) === String(tenant.bed)
+    );
+
+    return bed ? bedLabel(bed) : "See tenant record";
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">
-            Check-in / Check-out
+          <h1 className="text-2xl font-bold text-gray-900">
+            Check-In / Check-Out
           </h1>
-
           <p className="mt-1 text-sm text-gray-500">
-            Manage tenant arrivals and departures.
+            Assign beds and manage tenant stays.
           </p>
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
-          className="rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"
+          onClick={() => {
+            setShowForm(!showForm);
+            setError("");
+            setSuccess("");
+          }}
+          className="rounded-lg bg-orange-600 px-4 py-2 font-medium text-white hover:bg-orange-700"
         >
-          + Check-in Tenant
+          {showForm ? "Close Form" : "+ Check In Tenant"}
         </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-gray-500">Total Records</p>
-          <h2 className="mt-2 text-2xl font-bold text-gray-800">
-            {stats.total}
-          </h2>
+      {error && (
+        <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          {error}
         </div>
+      )}
 
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-gray-500">Currently Checked In</p>
-          <h2 className="mt-2 text-2xl font-bold text-green-600">
-            {stats.checkedIn}
-          </h2>
+      {success && (
+        <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">
+          {success}
         </div>
+      )}
 
-        <div className="rounded-xl bg-white p-5 shadow-sm">
-          <p className="text-sm text-gray-500">Checked Out</p>
-          <h2 className="mt-2 text-2xl font-bold text-gray-600">
-            {stats.checkedOut}
-          </h2>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {[
+          ["Active Stays", activeRecords.length],
+          ["Available Beds", availableBeds.length],
+          ["Completed Stays", completedRecords.length],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-500">{label}</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">
+              {value}
+            </p>
+          </div>
+        ))}
       </div>
 
-      {/* Filters */}
-      <div className="rounded-xl bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row">
-          <input
-            type="text"
-            placeholder="Search tenant, phone or record ID..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500"
-          />
+      {showForm && (
+        <form
+          onSubmit={checkIn}
+          className="grid grid-cols-1 gap-4 rounded-xl border bg-white p-5 sm:grid-cols-2"
+        >
+          <label className="text-sm font-medium text-gray-700">
+            Tenant
+            <select
+              required
+              value={form.tenant}
+              onChange={(e) => setForm({ ...form, tenant: e.target.value })}
+              className="mt-1 w-full rounded-lg border p-2"
+            >
+              <option value="">Select tenant</option>
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name} — {tenant.phone}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-gray-300 px-4 py-2.5 outline-none focus:border-blue-500"
+          <label className="text-sm font-medium text-gray-700">
+            Available Bed
+            <select
+              required
+              value={form.bed}
+              onChange={(e) => setForm({ ...form, bed: e.target.value })}
+              className="mt-1 w-full rounded-lg border p-2"
+            >
+              <option value="">Select available bed</option>
+              {availableBeds.map((bed) => (
+                <option key={bed.id} value={bed.id}>
+                  {bedLabel(bed)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedTenant() && (
+            <p className="text-sm text-gray-500 sm:col-span-2">
+              Tenant: {selectedTenant().name}
+              {selectedTenant().bed
+                ? " — already has a bed assigned; select another tenant."
+                : ""}
+            </p>
+          )}
+
+          <label className="text-sm font-medium text-gray-700">
+            Check-In Date
+            <input
+              type="date"
+              required
+              value={form.check_in_date}
+              onChange={(e) =>
+                setForm({ ...form, check_in_date: e.target.value })
+              }
+              className="mt-1 w-full rounded-lg border p-2"
+            />
+          </label>
+
+          <label className="text-sm font-medium text-gray-700">
+            Expected Check-Out
+            <input
+              type="date"
+              required
+              min={form.check_in_date}
+              value={form.expected_check_out}
+              onChange={(e) =>
+                setForm({ ...form, expected_check_out: e.target.value })
+              }
+              className="mt-1 w-full rounded-lg border p-2"
+            />
+          </label>
+
+          <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+            Security Deposit (₹)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={form.security_deposit}
+              onChange={(e) =>
+                setForm({ ...form, security_deposit: e.target.value })
+              }
+              className="mt-1 w-full rounded-lg border p-2"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={
+              saving ||
+              availableBeds.length === 0 ||
+              !tenants.length ||
+              Boolean(selectedTenant()?.bed)
+            }
+            className="rounded-lg bg-orange-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
           >
-            <option value="All">All Status</option>
-            <option value="Checked In">Checked In</option>
-            <option value="Checked Out">Checked Out</option>
-          </select>
-        </div>
-      </div>
+            {saving ? "Processing..." : "Confirm Check-In"}
+          </button>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-xl bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-50">
-              <tr className="text-left text-sm text-gray-500">
-                <th className="px-6 py-4">Record</th>
-                <th className="px-6 py-4">Tenant</th>
-                <th className="px-6 py-4">Room / Bed</th>
-                <th className="px-6 py-4">Check-in</th>
-                <th className="px-6 py-4">Expected Checkout</th>
-                <th className="px-6 py-4">Deposit</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Action</th>
+          {availableBeds.length === 0 && (
+            <p className="text-sm text-amber-700 sm:col-span-2">
+              No available beds. Add a bed or complete a checkout first.
+            </p>
+          )}
+
+          {tenants.length === 0 && (
+            <p className="text-sm text-amber-700 sm:col-span-2">
+              No active tenants found. Add or activate a tenant first.
+            </p>
+          )}
+        </form>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border bg-white">
+        <div className="flex items-center justify-between p-4">
+          <h2 className="font-semibold text-gray-900">Stay Records</h2>
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {loading ? (
+          <p className="p-6 text-gray-500">Loading records...</p>
+        ) : records.length === 0 ? (
+          <p className="p-6 text-gray-500">No stay records found.</p>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="bg-gray-50 text-gray-600">
+              <tr>
+                <th className="p-4">Tenant</th>
+                <th className="p-4">Check-In</th>
+                <th className="p-4">Expected Checkout</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Action</th>
               </tr>
             </thead>
-
-            <tbody>
-              {filteredRecords.map((record) => (
-                <tr
-                  key={record.id}
-                  className="border-t border-gray-100 text-sm"
-                >
-                  <td className="px-6 py-4 font-medium text-gray-800">
-                    {record.id}
-                  </td>
-
-                  <td className="px-6 py-4">
-                    <p className="font-medium text-gray-800">
-                      {record.tenant}
-                    </p>
-                    <p className="text-xs text-gray-500">{record.phone}</p>
-                  </td>
-
-                  <td className="px-6 py-4">
-                    {record.room ? (
-                      <>
-                        <p className="font-medium text-gray-800">
-                          Room {record.room}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Bed {record.bed}
-                        </p>
-                      </>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-
-                  <td className="px-6 py-4 text-gray-600">
-                    {record.checkInDate}
-                  </td>
-
-                  <td className="px-6 py-4 text-gray-600">
-                    {record.expectedCheckOut}
-                  </td>
-
-                  <td className="px-6 py-4 font-medium text-gray-700">
-                    ₹{record.deposit.toLocaleString("en-IN")}
-                  </td>
-
-                  <td className="px-6 py-4">
+            <tbody className="divide-y">
+              {records.map((record) => (
+                <tr key={record.id}>
+                  <td className="p-4 font-medium">{tenantName(record)}</td>
+                  <td className="p-4">{record.check_in_date}</td>
+                  <td className="p-4">{record.expected_check_out}</td>
+                  <td className="p-4">
                     <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${statusClass(
-                        record.status
-                      )}`}
+                      className={`rounded-full px-3 py-1 text-xs ${
+                        record.status === "Checked In"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
                     >
                       {record.status}
                     </span>
                   </td>
-
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => openDetails(record)}
-                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
-                    >
-                      View
-                    </button>
+                  <td className="p-4">
+                    {record.status === "Checked In" ? (
+                      <button
+                        onClick={() => checkOut(record)}
+                        className="rounded-lg border border-orange-300 px-3 py-1.5 text-orange-700 hover:bg-orange-50"
+                      >
+                        Check Out
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">Completed</span>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-
-        {filteredRecords.length === 0 && (
-          <div className="p-8 text-center text-gray-500">
-            No check-in/check-out records found.
-          </div>
         )}
       </div>
-
-      {/* Add Check-in Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-800">
-                Check-in Tenant
-              </h2>
-
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="text-xl text-gray-500 hover:text-gray-800"
-              >
-                ×
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleAddRecord}
-              className="grid grid-cols-1 gap-4 md:grid-cols-2"
-            >
-              <input
-                name="tenant"
-                value={formData.tenant}
-                onChange={handleInputChange}
-                placeholder="Tenant Name"
-                required
-                className="rounded-lg border border-gray-300 px-4 py-2.5"
-              />
-
-              <input
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                placeholder="Phone Number"
-                required
-                className="rounded-lg border border-gray-300 px-4 py-2.5"
-              />
-
-              <input
-                name="room"
-                value={formData.room}
-                onChange={handleInputChange}
-                placeholder="Room Number"
-                required
-                className="rounded-lg border border-gray-300 px-4 py-2.5"
-              />
-
-              <input
-                name="bed"
-                value={formData.bed}
-                onChange={handleInputChange}
-                placeholder="Bed Number"
-                required
-                className="rounded-lg border border-gray-300 px-4 py-2.5"
-              />
-
-              <select
-                name="sharing"
-                value={formData.sharing}
-                onChange={handleInputChange}
-                className="rounded-lg border border-gray-300 px-4 py-2.5"
-              >
-                <option>1 Sharing</option>
-                <option>2 Sharing</option>
-                <option>3 Sharing</option>
-                <option>4 Sharing</option>
-              </select>
-
-              <input
-                type="number"
-                name="deposit"
-                value={formData.deposit}
-                onChange={handleInputChange}
-                placeholder="Security Deposit"
-                required
-                className="rounded-lg border border-gray-300 px-4 py-2.5"
-              />
-
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">
-                  Check-in Date
-                </label>
-
-                <input
-                  type="date"
-                  name="checkInDate"
-                  value={formData.checkInDate}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm text-gray-600">
-                  Expected Check-out
-                </label>
-
-                <input
-                  type="date"
-                  name="expectedCheckOut"
-                  value={formData.expectedCheckOut}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 md:col-span-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="rounded-lg border border-gray-300 px-5 py-2.5 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white hover:bg-blue-700"
-                >
-                  Check-in Tenant
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Details Modal */}
-      {showDetailsModal && selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-800">
-                Check-in / Check-out Details
-              </h2>
-
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-xl text-gray-500 hover:text-gray-800"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Record ID</span>
-                <span className="font-medium">{selectedRecord.id}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Tenant</span>
-                <span className="font-medium">
-                  {selectedRecord.tenant}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Phone</span>
-                <span>{selectedRecord.phone}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Room</span>
-                <span>
-                  {selectedRecord.room
-                    ? `${selectedRecord.room} / ${selectedRecord.bed}`
-                    : "-"}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Sharing</span>
-                <span>{selectedRecord.sharing}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Check-in</span>
-                <span>{selectedRecord.checkInDate}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">
-                  Expected Check-out
-                </span>
-                <span>{selectedRecord.expectedCheckOut}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Security Deposit</span>
-                <span>
-                  ₹{selectedRecord.deposit.toLocaleString("en-IN")}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span className="text-gray-500">Status</span>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${statusClass(
-                    selectedRecord.status
-                  )}`}
-                >
-                  {selectedRecord.status}
-                </span>
-              </div>
-
-              {selectedRecord.actualCheckOut && (
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Actual Check-out</span>
-                  <span>{selectedRecord.actualCheckOut}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="rounded-lg border border-gray-300 px-5 py-2.5 hover:bg-gray-50"
-              >
-                Close
-              </button>
-
-              {selectedRecord.status === "Checked In" && (
-                <button
-                  onClick={() => handleCheckOut(selectedRecord.id)}
-                  className="rounded-lg bg-red-600 px-5 py-2.5 font-medium text-white hover:bg-red-700"
-                >
-                  Check-out Tenant
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-
-export default CheckInOut;
